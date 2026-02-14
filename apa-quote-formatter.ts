@@ -5,7 +5,7 @@
  * seguindo as diretrizes da American Psychological Association (7ª edição)
  * 
  * @author Programador Sênior TypeScript
- * @version 1.0.0
+ * @version 1.1.0
  */
 
 /// <reference types="office-js" />
@@ -72,8 +72,6 @@ namespace APAQuoteFormatter {
 
         private config: FormatterConfig;
         private report: ExecutionReport;
-        private undoStack: Array<{ range: Word.Range; text: string }> = [];
-        private paragraphOffsets: number[] = [];
 
         constructor(config: FormatterConfig) {
             this.config = config;
@@ -94,39 +92,36 @@ namespace APAQuoteFormatter {
             try {
                 await Word.run(async (context) => {
                     const body = context.document.body;
-                    body.load('text');
-                    await context.sync();
 
                     // Obter range de trabalho (seleção ou documento inteiro)
-                    // Cast to any to allow both Range and Body in helper methods
                     const workingRange = (this.config.applyToSelection
                         ? context.document.getSelection()
-                        : body) as any;
+                        : body);
 
-                    workingRange.load('text, paragraphs');
+                    // Carregar parágrafos para iteração
+                    const paragraphs = workingRange.paragraphs;
+                    paragraphs.load('items');
                     await context.sync();
 
-                    // 1. Converter aspas retas em tipográficas
-                    if (this.config.convertQuotes) {
-                        await this.convertStraightToTypographicQuotes(context, workingRange);
+                    // Iterar por parágrafos para evitar substituição destrutiva de todo o corpo
+                    for (let i = 0; i < paragraphs.items.length; i++) {
+                        const paragraph = paragraphs.items[i];
+
+                        // 1. Converter aspas retas em tipográficas
+                        if (this.config.convertQuotes) {
+                            await this.convertQuotesInParagraph(context, paragraph);
+                        }
+
+                        // 2. Corrigir pontuação
+                        if (this.config.fixPunctuation) {
+                            await this.fixPunctuationInParagraph(context, paragraph);
+                        }
                     }
 
-                    // 2. Validar uso de aspas
-                    if (this.config.validateUsage) {
-                        await this.validateQuoteUsage(context, workingRange);
+                    // Validações (apenas leitura)
+                    if (this.config.validateUsage || this.config.identifyLongQuotes) {
+                        await this.performValidations(context, workingRange);
                     }
-
-                    // 3. Corrigir pontuação
-                    if (this.config.fixPunctuation) {
-                        await this.fixPunctuation(context, workingRange);
-                    }
-
-                    // 4. Identificar citações longas
-                    if (this.config.identifyLongQuotes) {
-                        await this.identifyLongQuotes(context, workingRange);
-                    }
-
-                    await context.sync();
                 });
 
                 return this.report;
@@ -137,388 +132,206 @@ namespace APAQuoteFormatter {
         }
 
         /**
-         * Converte aspas retas em aspas tipográficas curvas
+         * Converte aspas em um parágrafo específico preservando formatação
          */
-        private async convertStraightToTypographicQuotes(
-            context: Word.RequestContext,
-            range: Word.Range
-        ): Promise<void> {
-            range.load('text');
+        private async convertQuotesInParagraph(context: Word.RequestContext, paragraph: Word.Paragraph): Promise<void> {
+            paragraph.load('text');
             await context.sync();
+            const text = paragraph.text;
+            if (!text) return;
 
-            const text = range.text;
-            let newText = text;
-            let conversionCount = 0;
-
-            // Padrão para identificar aspas duplas retas
-            // Converte " no início de palavra ou após espaço em "
-            newText = newText.replace(QuoteFormatter.Patterns.DoubleQuoteStraightOpen, (_match, before, after) => {
-                conversionCount++;
-                return before + '"' + after;
-            });
-
-            // Converte " no final de palavra ou antes de espaço/pontuação em "
-            newText = newText.replace(QuoteFormatter.Patterns.DoubleQuoteStraightClose, (_match, before) => {
-                conversionCount++;
-                return before + '"';
-            });
-
-            // Converte aspas simples para contextos específicos
-            // Mantém aspas simples apenas em citações dentro de citações
-            newText = this.handleSingleQuotes(newText);
-
-            if (newText !== text) {
-                // Salvar para desfazer
-                this.undoStack.push({ range: range, text: text });
-
-                // Aplicar mudanças
-                range.insertText(newText, Word.InsertLocation.replace);
-                this.report.quotesConverted += conversionCount;
-                this.report.straightToTypographic += conversionCount;
-
+            // Converter aspas duplas de abertura: "Texto -> “Texto
+            const openMatches = Array.from(text.matchAll(QuoteFormatter.Patterns.DoubleQuoteStraightOpen));
+            for (const match of openMatches) {
+                const searchResults = paragraph.search(match[0], { matchCase: true });
+                searchResults.load('items');
                 await context.sync();
+
+                for (const range of searchResults.items) {
+                    const quoteRanges = range.search('"', { matchCase: true });
+                    quoteRanges.load('items');
+                    await context.sync();
+
+                    if (quoteRanges.items.length > 0) {
+                        quoteRanges.items[0].insertText('“', Word.InsertLocation.replace);
+                        this.report.quotesConverted++;
+                        this.report.straightToTypographic++;
+                    }
+                }
+            }
+
+            if (openMatches.length > 0) await context.sync();
+
+            // Converter aspas duplas de fechamento: Texto" -> Texto”
+            paragraph.load('text');
+            await context.sync();
+            const updatedText = paragraph.text;
+
+            const closeMatches = Array.from(updatedText.matchAll(QuoteFormatter.Patterns.DoubleQuoteStraightClose));
+            for (const match of closeMatches) {
+                const searchResults = paragraph.search(match[0], { matchCase: true });
+                searchResults.load('items');
+                await context.sync();
+
+                for (const range of searchResults.items) {
+                    const quoteRanges = range.search('"', { matchCase: true });
+                    quoteRanges.load('items');
+                    await context.sync();
+
+                    if (quoteRanges.items.length > 0) {
+                        quoteRanges.items[0].insertText('”', Word.InsertLocation.replace);
+                        this.report.quotesConverted++;
+                        this.report.straightToTypographic++;
+                    }
+                }
             }
         }
 
         /**
-         * Trata aspas simples, convertendo apenas quando apropriado
+         * Corrige pontuação em um parágrafo preservando formatação
          */
-        private handleSingleQuotes(text: string): string {
-            // Identifica citações dentro de citações: "texto 'citação interna' texto"
+        private async fixPunctuationInParagraph(context: Word.RequestContext, paragraph: Word.Paragraph): Promise<void> {
+            paragraph.load('text');
+            await context.sync();
+            const text = paragraph.text;
+            if (!text) return;
 
-            // Primeiro, protege aspas simples em citações aninhadas
-            let result = text.replace(QuoteFormatter.Patterns.NestedQuote, (match) => {
-                // Mantém aspas simples dentro de duplas
-                return match.replace(/'/g, '’'); // Aspas simples tipográficas
-            });
+            // Ponto: ". -> ."
+            const periodMatches = Array.from(text.matchAll(QuoteFormatter.Patterns.PunctuationPeriod));
+            for (const match of periodMatches) {
+                const searchResults = paragraph.search(match[0], { matchCase: true });
+                searchResults.load('items');
+                await context.sync();
 
-            // Converte aspas simples isoladas (incorretas) em duplas
-            // Apenas se não estiverem dentro de aspas duplas
-            result = result.replace(QuoteFormatter.Patterns.IncorrectSingleQuote, (_match, before, content) => {
-                this.report.singleToDouble++;
-                return before + '"' + content + '"';
-            });
+                for (const range of searchResults.items) {
+                    range.insertText('.”', Word.InsertLocation.replace);
+                    this.report.punctuationFixed++;
+                }
+            }
 
-            return result;
+            // Vírgula: ", -> ,"
+            const commaMatches = Array.from(text.matchAll(QuoteFormatter.Patterns.PunctuationComma));
+            for (const match of commaMatches) {
+                const searchResults = paragraph.search(match[0], { matchCase: true });
+                searchResults.load('items');
+                await context.sync();
+
+                for (const range of searchResults.items) {
+                    range.insertText(',”', Word.InsertLocation.replace);
+                    this.report.punctuationFixed++;
+                }
+            }
         }
 
         /**
-         * Valida o uso de aspas segundo normas APA
+         * Realiza validações de uso (apenas leitura)
          */
-        private async validateQuoteUsage(
-            context: Word.RequestContext,
-            range: Word.Range
-        ): Promise<void> {
-            // [OPTIMIZED] Load all paragraphs data at once to avoid sync in loop
-            const paragraphs = range.paragraphs;
-            paragraphs.load('items/text'); // Load text property for all items
+        private async performValidations(context: Word.RequestContext, range: Word.Range): Promise<void> {
+            range.load("text, paragraphs");
             await context.sync();
 
-            // Perform validation in memory
+            const paragraphs = range.paragraphs;
+            paragraphs.load('items/text');
+            await context.sync();
+
             for (let i = 0; i < paragraphs.items.length; i++) {
-                const paragraph = paragraphs.items[i];
-                if (!paragraph) continue;
-                const text = paragraph.text;
+                const p = paragraphs.items[i];
+                if (!p.text) continue;
 
-                if (!text) continue;
+                if (this.config.validateUsage) {
+                    this.checkTechnicalTerms(p.text, i + 1);
+                    this.checkScaleAnchors(p.text, i + 1);
+                    this.checkIncorrectSingleQuotes(p.text, i + 1);
+                }
 
-                // Verificar termos técnicos entre aspas que deveriam estar em itálico
-                this.checkTechnicalTerms(text, i + 1);
-
-                // Verificar âncoras de escala
-                this.checkScaleAnchors(text, i + 1);
-
-                // Verificar uso incorreto de aspas simples
-                this.checkIncorrectSingleQuotes(text, i + 1);
+                if (this.config.identifyLongQuotes) {
+                    this.checkLongQuotes(p.text, i + 1);
+                }
             }
         }
 
-        /**
-         * Verificar termos técnicos que deveriam estar em itálico
-         */
-        private checkTechnicalTerms(text: string, paragraphNumber: number): void {
+        private checkTechnicalTerms(text: string, pNum: number): void {
             QuoteFormatter.Patterns.TechnicalTerms.forEach(pattern => {
                 const matches = text.match(pattern);
                 if (matches) {
                     matches.forEach(match => {
                         this.report.issues.push({
                             type: 'technical_term',
-                            location: `Parágrafo ${paragraphNumber}`,
+                            location: `Parágrafo ${pNum}`,
                             text: match,
-                            suggestion: `Considere usar itálico em vez de aspas: ${match.replace(/"/g, '')}`,
-                            paragraph: paragraphNumber
+                            suggestion: `Considere usar itálico: ${match.replace(/"/g, '')}`,
+                            paragraph: pNum
                         });
                     });
                 }
             });
         }
 
-        /**
-         * Verifica âncoras de escala entre aspas
-         */
-        private checkScaleAnchors(text: string, paragraphNumber: number): void {
+        private checkScaleAnchors(text: string, pNum: number): void {
             const matches = text.matchAll(QuoteFormatter.Patterns.ScaleAnchor);
             for (const match of matches) {
                 this.report.issues.push({
                     type: 'scale_anchor',
-                    location: `Parágrafo ${paragraphNumber}`,
+                    location: `Parágrafo ${pNum}`,
                     text: match[0],
-                    suggestion: `Âncoras de escala devem usar itálico: ${match[1]} = ${match[2]}`,
-                    paragraph: paragraphNumber
+                    suggestion: `Âncoras de escala devem usar itálico`,
+                    paragraph: pNum
                 });
             }
         }
 
-        /**
-         * Verifica uso incorreto de aspas simples
-         */
-        private checkIncorrectSingleQuotes(text: string, paragraphNumber: number): void {
+        private checkIncorrectSingleQuotes(text: string, pNum: number): void {
             const matches = text.matchAll(QuoteFormatter.Patterns.IncorrectSingleQuoteContext);
             for (const match of matches) {
-                // Verificar se não está dentro de aspas duplas
-                const beforeQuote = text.substring(0, match.index!);
-                // Simple check for balanced double quotes before this point
-                const openDoubleQuotes = (beforeQuote.match(/"/g) || []).length;
-
-                if (openDoubleQuotes % 2 === 0) {
-                    this.report.issues.push({
-                        type: 'wrong_single_quote',
-                        location: `Parágrafo ${paragraphNumber}`,
-                        text: match[0],
-                        suggestion: `Use aspas duplas em vez de simples: "${match[1]}"`,
-                        paragraph: paragraphNumber
-                    });
-                }
+                this.report.issues.push({
+                    type: 'wrong_single_quote',
+                    location: `Parágrafo ${pNum}`,
+                    text: match[0],
+                    suggestion: `Use aspas duplas: "${match[1]}"`,
+                    paragraph: pNum
+                });
             }
         }
 
-        /**
-         * Corrige pontuação em relação às aspas
-         */
-        private async fixPunctuation(
-            context: Word.RequestContext,
-            range: Word.Range
-        ): Promise<void> {
-            range.load('text');
-            await context.sync();
-
-            let text = range.text;
-            const originalText = text;
-            let fixCount = 0;
-
-            // Regra APA: pontos e vírgulas dentro das aspas
-            // "texto".<space> -> "texto."<space>
-            text = text.replace(QuoteFormatter.Patterns.PunctuationPeriod, (_match) => {
-                fixCount++;
-                return '."';
-            });
-
-            text = text.replace(QuoteFormatter.Patterns.PunctuationComma, (_match) => {
-                fixCount++;
-                return ',"';
-            });
-
-            // Regra APA: ponto-e-vírgula e dois-pontos fora das aspas
-            text = text.replace(QuoteFormatter.Patterns.PunctuationSemiColon, '"; ');
-            text = text.replace(QuoteFormatter.Patterns.PunctuationColon, '": ');
-
-            // Corrigir pontuação com referência parentética
-            // "texto" (Autor, 2020). -> "texto" (Autor, 2020).
-            text = text.replace(QuoteFormatter.Patterns.ParentheticalRef, '" ($2).');
-
-            if (text !== originalText) {
-                this.undoStack.push({ range: range, text: originalText });
-                range.insertText(text, Word.InsertLocation.replace);
-                this.report.punctuationFixed = fixCount;
-                await context.sync();
-            }
-        }
-
-        /**
-         * Identifica citações longas (40+ palavras) que devem ser formatadas como bloco
-         */
-        private async identifyLongQuotes(
-            context: Word.RequestContext,
-            range: Word.Range
-        ): Promise<void> {
-            range.load('text');
-            await context.sync();
-
-            const text = range.text;
-
-            // Encontrar todas as citações entre aspas
-            const matches = text.matchAll(QuoteFormatter.Patterns.LongQuote); // Mínimo de 100 caracteres para verificar
-
-            // Build paragraph offsets cache once
-            this.buildParagraphOffsets(text);
-
+        private checkLongQuotes(text: string, pNum: number): void {
+            const matches = text.matchAll(QuoteFormatter.Patterns.LongQuote);
             for (const match of matches) {
-                const quotedText = match[1];
-                const wordCount = this.countWords(quotedText || '');
-
-                if (wordCount >= 40) {
-                    // Encontrar parágrafo
-                    const position = match.index!;
-                    const paragraphNumber = this.findParagraphNumber(text, position);
-
+                if (this.countWords(match[1]) >= 40) {
                     this.report.longQuotesFound++;
                     this.report.issues.push({
                         type: 'long_quote',
-                        location: `Parágrafo ${paragraphNumber}`,
-                        text: match[0].substring(0, 100) + '...',
-                        suggestion: `Esta citação tem ${wordCount} palavras e deve ser formatada como bloco (sem aspas, recuo de 1,27 cm)`,
-                        paragraph: paragraphNumber
+                        location: `Parágrafo ${pNum}`,
+                        text: match[0].substring(0, 50) + '...',
+                        suggestion: `Citação longa (40+ palavras) deve ser bloco`,
+                        paragraph: pNum
                     });
                 }
             }
         }
 
-        /**
-         * Converte citação longa em formato de bloco
-         */
-        public async convertToBlockQuote(
-            context: Word.RequestContext,
-            paragraphNumber: number
-        ): Promise<void> {
-            const paragraphs = context.document.body.paragraphs;
-            paragraphs.load('items');
-            await context.sync();
-
-            if (paragraphNumber > 0 && paragraphNumber <= paragraphs.items.length) {
-                const paragraph = paragraphs.items[paragraphNumber - 1];
-                if (!paragraph) return;
-
-                paragraph.load('text, leftIndent, firstLineIndent');
-                await context.sync();
-
-                let text = paragraph.text;
-                if (!text) return;
-
-                // Remover aspas
-                text = text.replace(/^"/, '').replace(/"$/, '');
-
-                // Aplicar formatação
-                paragraph.leftIndent = 36; // 1,27 cm em pontos (aproximadamente)
-                paragraph.firstLineIndent = 0;
-                paragraph.insertText(text, Word.InsertLocation.replace);
-
-                await context.sync();
-            }
-        }
-
-        /**
-         * Conta palavras em um texto
-         */
         private countWords(text: string): number {
             return text.trim().split(/\s+/).length;
         }
 
-        /**
-         * Constrói cache de offsets de parágrafos
-         */
-        private buildParagraphOffsets(text: string): void {
-            this.paragraphOffsets = [];
-            let currentPos = 0;
-            // Split once to find lengths
-            // Note: This assumes \n is the paragraph delimiter in the text property
-            const paragraphs = text.split('\n');
-            for (const p of paragraphs) {
-                currentPos += p.length + 1; // +1 for the newline char (or delimiter)
-                this.paragraphOffsets.push(currentPos); // End position of this paragraph
-            }
-        }
-
-        /**
-         * Encontra o número do parágrafo baseado na posição no texto (Optimized with binary search or simple cache lookup)
-         */
-        private findParagraphNumber(text: string, position: number): number {
-            if (this.paragraphOffsets.length === 0) {
-                // Fallback if cache not built
-                const textUpToPosition = text.substring(0, position);
-                return textUpToPosition.split('\n').length;
-            }
-
-            // Find the first offset strictly greater than position
-            // Since paragraphs order is sequential, we can just findIndex or binary search
-            // For simplicity in JS:
-            const index = this.paragraphOffsets.findIndex(offset => offset > position);
-            return index !== -1 ? index + 1 : this.paragraphOffsets.length;
-        }
-
-        /**
-         * Desfaz todas as alterações realizadas
-         */
-        public async undoChanges(context: Word.RequestContext): Promise<void> {
-            for (const item of this.undoStack.reverse()) {
-                item.range.insertText(item.text, Word.InsertLocation.replace);
-            }
-            await context.sync();
-            this.undoStack = [];
-        }
-
-        /**
-         * Gera relatório textual das operações realizadas
-         */
         public generateTextReport(): string {
             let report = '=== RELATÓRIO DE FORMATAÇÃO APA ===\n\n';
-
             report += `📊 ESTATÍSTICAS:\n`;
-            report += `• Total de aspas convertidas: ${this.report.quotesConverted}\n`;
-            report += `• Aspas retas → tipográficas: ${this.report.straightToTypographic}\n`;
-            report += `• Aspas simples → duplas: ${this.report.singleToDouble}\n`;
+            report += `• Aspas convertidas: ${this.report.quotesConverted}\n`;
             report += `• Pontuações corrigidas: ${this.report.punctuationFixed}\n`;
-            report += `• Citações longas encontradas: ${this.report.longQuotesFound}\n\n`;
+            report += `• Problemas encontrados: ${this.report.issues.length}\n\n`;
 
             if (this.report.issues.length > 0) {
-                report += `⚠️ PROBLEMAS ENCONTRADOS (${this.report.issues.length}):\n\n`;
-
-                const issuesByType = this.groupIssuesByType();
-
-                for (const [type, issues] of Object.entries(issuesByType)) {
-                    report += `\n${this.getIssueTypeLabel(type)}:\n`;
-                    issues.forEach((issue, index) => {
-                        report += `  ${index + 1}. ${issue.location}\n`;
-                        report += `     Texto: ${issue.text}\n`;
-                        report += `     💡 ${issue.suggestion}\n\n`;
-                    });
-                }
+                report += `⚠️ DETALHES:\n`;
+                this.report.issues.slice(0, 10).forEach(issue => {
+                    report += `- [${issue.location}] ${issue.suggestion}\n`;
+                });
+                if (this.report.issues.length > 10) report += `...e mais ${this.report.issues.length - 10} itens.`;
             } else {
-                report += '✅ Nenhum problema encontrado!\n';
+                report += '✅ Tudo certo!';
             }
-
-            report += '\n=== FIM DO RELATÓRIO ===';
             return report;
         }
 
-        /**
-         * Agrupa problemas por tipo
-         */
-        private groupIssuesByType(): Record<string, ValidationIssue[]> {
-            const grouped: Record<string, ValidationIssue[]> = {};
-
-            this.report.issues.forEach(issue => {
-                if (!grouped[issue.type]) {
-                    grouped[issue.type] = [];
-                }
-                grouped[issue.type]!.push(issue);
-            });
-
-            return grouped;
-        }
-
-        /**
-         * Retorna label descritivo para tipo de problema
-         */
-        private getIssueTypeLabel(type: string): string {
-            const labels: Record<string, string> = {
-                'long_quote': '📏 Citações Longas (devem ser formatadas como bloco)',
-                'technical_term': '📚 Termos Técnicos (considere usar itálico)',
-                'wrong_single_quote': '❌ Aspas Simples Incorretas',
-                'punctuation': '🔤 Problemas de Pontuação',
-                'scale_anchor': '📊 Âncoras de Escala (devem usar itálico)'
-            };
-            return labels[type] || type;
-        }
     }
 
     /**
@@ -609,7 +422,7 @@ FUNCIONALIDADES:
 
 1️⃣ CONVERTER ASPAS
    • Transforma aspas retas (" ") em aspas tipográficas curvas (" ")
-   • Mantém aspas simples apenas em citações dentro de citações
+   • Mantém a formatação original do texto (negrito, itálico, etc.)
 
 2️⃣ VALIDAR USO
    • Identifica termos técnicos que deveriam estar em itálico
@@ -618,32 +431,14 @@ FUNCIONALIDADES:
 
 3️⃣ CORRIGIR PONTUAÇÃO
    • Coloca pontos e vírgulas dentro das aspas
-   • Mantém ponto-e-vírgula e dois-pontos fora das aspas
-   • Corrige pontuação com referências parentéticas
 
 4️⃣ IDENTIFICAR CITAÇÕES LONGAS
    • Detecta citações com 40+ palavras
-   • Sugere conversão para formato de bloco
-
-REGRAS APA APLICADAS:
-
-✓ Títulos de artigos/capítulos: entre aspas duplas
-✓ Citações diretas < 40 palavras: entre aspas duplas
-✓ Citações ≥ 40 palavras: bloco recuado sem aspas
-✓ Citação dentro de citação: aspas simples internas
-✓ Termos técnicos: itálico (não aspas)
-✓ Ironia/ênfase: aspas duplas (primeira ocorrência)
 
 COMO USAR:
-
 1. Selecione as opções desejadas
 2. Escolha aplicar ao documento inteiro ou apenas à seleção
 3. Clique em "Executar"
-4. Revise o relatório gerado
-5. Use "Desfazer" (Ctrl+Z) se necessário
-
-Para mais informações sobre normas APA, consulte:
-https://apastyle.apa.org/
         `;
 
         alert(helpText);

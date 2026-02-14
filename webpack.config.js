@@ -66,6 +66,11 @@ module.exports = async (env, options) => {
                 template: "./commands.html",
                 chunks: ["apa-quote-formatter"],
             }),
+            new HtmlWebpackPlugin({
+                filename: "success.html",
+                template: "./success.html",
+                chunks: [],
+            }),
         ],
         devServer: {
             headers: {

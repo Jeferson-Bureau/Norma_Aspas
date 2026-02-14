@@ -94,9 +94,10 @@ namespace APAQuoteFormatter {
                     const body = context.document.body;
 
                     // Obter range de trabalho (seleção ou documento inteiro)
+                    // Cast to any to allow both Range and Body in helper methods
                     const workingRange = (this.config.applyToSelection
                         ? context.document.getSelection()
-                        : body);
+                        : body) as any;
 
                     // Carregar parágrafos para iteração
                     const paragraphs = workingRange.paragraphs;
@@ -106,6 +107,7 @@ namespace APAQuoteFormatter {
                     // Iterar por parágrafos para evitar substituição destrutiva de todo o corpo
                     for (let i = 0; i < paragraphs.items.length; i++) {
                         const paragraph = paragraphs.items[i];
+                        if (!paragraph) continue;
 
                         // 1. Converter aspas retas em tipográficas
                         if (this.config.convertQuotes) {
@@ -120,6 +122,7 @@ namespace APAQuoteFormatter {
 
                     // Validações (apenas leitura)
                     if (this.config.validateUsage || this.config.identifyLongQuotes) {
+                        // Cast workingRange again or ensure performValidations accepts 'any' or intersection
                         await this.performValidations(context, workingRange);
                     }
                 });
@@ -250,7 +253,8 @@ namespace APAQuoteFormatter {
             }
         }
 
-        private checkTechnicalTerms(text: string, pNum: number): void {
+        private checkTechnicalTerms(text: string | undefined, pNum: number): void {
+            if (!text) return;
             QuoteFormatter.Patterns.TechnicalTerms.forEach(pattern => {
                 const matches = text.match(pattern);
                 if (matches) {
@@ -267,33 +271,41 @@ namespace APAQuoteFormatter {
             });
         }
 
-        private checkScaleAnchors(text: string, pNum: number): void {
+        private checkScaleAnchors(text: string | undefined, pNum: number): void {
+            if (!text) return;
             const matches = text.matchAll(QuoteFormatter.Patterns.ScaleAnchor);
             for (const match of matches) {
                 this.report.issues.push({
                     type: 'scale_anchor',
                     location: `Parágrafo ${pNum}`,
                     text: match[0],
-                    suggestion: `Âncoras de escala devem usar itálico`,
+                    suggestion: `Âncoras de escala devem usar itálico: ${match[1]} = ${match[2]}`,
                     paragraph: pNum
                 });
             }
         }
 
-        private checkIncorrectSingleQuotes(text: string, pNum: number): void {
+        private checkIncorrectSingleQuotes(text: string | undefined, pNum: number): void {
+            if (!text) return;
             const matches = text.matchAll(QuoteFormatter.Patterns.IncorrectSingleQuoteContext);
             for (const match of matches) {
-                this.report.issues.push({
-                    type: 'wrong_single_quote',
-                    location: `Parágrafo ${pNum}`,
-                    text: match[0],
-                    suggestion: `Use aspas duplas: "${match[1]}"`,
-                    paragraph: pNum
-                });
+                const beforeQuote = text.substring(0, match.index!);
+                const openDoubleQuotes = (beforeQuote.match(/"/g) || []).length;
+
+                if (openDoubleQuotes % 2 === 0) {
+                    this.report.issues.push({
+                        type: 'wrong_single_quote',
+                        location: `Parágrafo ${pNum}`,
+                        text: match[0],
+                        suggestion: `Use aspas duplas em vez de simples: "${match[1]}"`,
+                        paragraph: pNum
+                    });
+                }
             }
         }
 
-        private checkLongQuotes(text: string, pNum: number): void {
+        private checkLongQuotes(text: string | undefined, pNum: number): void {
+            if (!text) return;
             const matches = text.matchAll(QuoteFormatter.Patterns.LongQuote);
             for (const match of matches) {
                 if (this.countWords(match[1]) >= 40) {

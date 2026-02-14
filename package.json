@@ -5,6 +5,7 @@
   "main": "apa-quote-formatter.js",
   "scripts": {
     "start": "office-addin-debugging start manifest.xml",
+    "stop": "office-addin-debugging stop manifest.xml",
     "start:desktop": "office-addin-debugging start manifest.xml desktop",
     "dev-server": "webpack serve --mode development",
     "build": "webpack --mode production",

@@ -150,15 +150,20 @@ namespace APAQuoteFormatter {
                 searchResults.load('items');
                 await context.sync();
 
+                if (!searchResults.items) continue;
+
                 for (const range of searchResults.items) {
                     const quoteRanges = range.search('"', { matchCase: true });
                     quoteRanges.load('items');
                     await context.sync();
 
-                    if (quoteRanges.items.length > 0) {
-                        quoteRanges.items[0].insertText('“', Word.InsertLocation.replace);
-                        this.report.quotesConverted++;
-                        this.report.straightToTypographic++;
+                    if (quoteRanges.items && quoteRanges.items.length > 0) {
+                        const quote = quoteRanges.items[0];
+                        if (quote) {
+                            quote.insertText('“', Word.InsertLocation.replace);
+                            this.report.quotesConverted++;
+                            this.report.straightToTypographic++;
+                        }
                     }
                 }
             }
@@ -176,15 +181,20 @@ namespace APAQuoteFormatter {
                 searchResults.load('items');
                 await context.sync();
 
+                if (!searchResults.items) continue;
+
                 for (const range of searchResults.items) {
                     const quoteRanges = range.search('"', { matchCase: true });
                     quoteRanges.load('items');
                     await context.sync();
 
-                    if (quoteRanges.items.length > 0) {
-                        quoteRanges.items[0].insertText('”', Word.InsertLocation.replace);
-                        this.report.quotesConverted++;
-                        this.report.straightToTypographic++;
+                    if (quoteRanges.items && quoteRanges.items.length > 0) {
+                        const quote = quoteRanges.items[0];
+                        if (quote) {
+                            quote.insertText('”', Word.InsertLocation.replace);
+                            this.report.quotesConverted++;
+                            this.report.straightToTypographic++;
+                        }
                     }
                 }
             }
@@ -239,7 +249,7 @@ namespace APAQuoteFormatter {
 
             for (let i = 0; i < paragraphs.items.length; i++) {
                 const p = paragraphs.items[i];
-                if (!p.text) continue;
+                if (!p || !p.text) continue;
 
                 if (this.config.validateUsage) {
                     this.checkTechnicalTerms(p.text, i + 1);
@@ -308,7 +318,7 @@ namespace APAQuoteFormatter {
             if (!text) return;
             const matches = text.matchAll(QuoteFormatter.Patterns.LongQuote);
             for (const match of matches) {
-                if (this.countWords(match[1]) >= 40) {
+                if (match[1] && this.countWords(match[1]) >= 40) {
                     this.report.longQuotesFound++;
                     this.report.issues.push({
                         type: 'long_quote',

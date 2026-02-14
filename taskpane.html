@@ -1,13 +1,14 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Formatador APA - Aspas</title>
-    
+
     <!-- Office.js -->
     <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    
+
     <style>
         * {
             margin: 0;
@@ -21,6 +22,7 @@
             color: #333;
             height: 100vh;
             overflow: hidden;
+            padding: 0;
         }
 
         .container {
@@ -34,35 +36,38 @@
         .header {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 15px;
+            padding: 8px;
             text-align: center;
             flex-shrink: 0;
         }
 
         .header h1 {
-            font-size: 20px;
-            margin-bottom: 4px;
+            font-size: 16px;
+            margin-bottom: 2px;
         }
 
         .header p {
-            font-size: 13px;
+            font-size: 11px;
             opacity: 0.9;
         }
 
         .content {
-            padding: 15px;
+            padding: 10px;
             overflow-y: auto;
             flex: 1;
+            display: flex;
+            flex-direction: column;
         }
 
         .section {
-            margin-bottom: 15px;
+            margin-bottom: 8px;
+            flex-shrink: 0;
         }
 
         .section-title {
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 600;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
             color: #667eea;
             display: flex;
             align-items: center;
@@ -70,23 +75,24 @@
 
         .section-title::before {
             content: '▶';
-            margin-right: 6px;
-            font-size: 10px;
+            margin-right: 4px;
+            font-size: 8px;
         }
 
         .checkbox-group {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
         }
 
         .checkbox-item {
             display: flex;
-            align-items: flex-start;
-            padding: 8px;
+            align-items: center;
+            padding: 4px 8px;
             background: #f8f9fa;
-            border-radius: 6px;
+            border-radius: 4px;
             transition: all 0.2s ease;
+            min-height: 28px;
         }
 
         .checkbox-item:hover {
@@ -94,55 +100,71 @@
         }
 
         .checkbox-item input[type="checkbox"] {
-            margin-right: 10px;
-            margin-top: 3px;
+            margin-right: 8px;
+            margin-top: 0;
+            width: 14px;
+            height: 14px;
+        }
+
+        .checkbox-label {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            line-height: 1;
         }
 
         .checkbox-label strong {
             display: block;
-            margin-bottom: 2px;
-            font-size: 13px;
+            font-size: 11px;
             color: #333;
+            margin-bottom: 1px;
         }
 
         .checkbox-label small {
             color: #6c757d;
-            font-size: 11px;
-            line-height: 1.2;
+            font-size: 9px;
+            display: none;
+            /* Hide descriptions to save space */
+        }
+
+        /* Show description only on hover to save space */
+        .checkbox-item:hover .checkbox-label small {
+            display: block;
         }
 
         .radio-group {
             display: flex;
             gap: 10px;
-            padding: 10px;
+            padding: 6px;
             background: #f8f9fa;
-            border-radius: 6px;
+            border-radius: 4px;
         }
 
         .radio-item {
             display: flex;
             align-items: center;
-            font-size: 13px;
+            font-size: 11px;
         }
 
         .radio-item input[type="radio"] {
-            margin-right: 6px;
+            margin-right: 4px;
             cursor: pointer;
         }
 
         .button-group {
             display: flex;
             gap: 8px;
-            margin-top: 20px;
-            margin-bottom: 10px;
+            margin-top: auto;
+            margin-bottom: 0;
+            padding-top: 8px;
         }
 
         button {
             flex: 1;
-            padding: 10px;
+            padding: 8px;
             border: none;
-            border-radius: 6px;
-            font-size: 13px;
+            border-radius: 4px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.2s ease;
@@ -161,7 +183,7 @@
         .btn-info {
             background: #17a2b8;
             color: white;
-            flex: 0.4;
+            flex: 0.3;
         }
 
         .btn-info:hover {
@@ -169,12 +191,12 @@
         }
 
         .status {
-            padding: 10px;
-            border-radius: 6px;
-            margin-top: 15px;
+            padding: 6px;
+            border-radius: 4px;
+            margin-top: 8px;
             text-align: center;
             font-weight: 500;
-            font-size: 13px;
+            font-size: 11px;
             display: none;
         }
 
@@ -202,33 +224,29 @@
         .info-box {
             background: #e7f3ff;
             border-left: 3px solid #2196F3;
-            padding: 10px;
+            padding: 6px;
             border-radius: 4px;
-            margin-bottom: 15px;
-            font-size: 12px;
+            margin-bottom: 8px;
+            font-size: 10px;
+            display: none;
+        }
+
+        /* Responsive info box */
+        @media (min-height: 450px) {
+            .info-box {
+                display: block;
+            }
         }
 
         .info-box strong {
             display: block;
-            margin-bottom: 5px;
+            margin-bottom: 2px;
             color: #1976D2;
         }
 
         .info-box ul {
-            margin-left: 15px;
+            margin-left: 12px;
             color: #555;
-        }
-
-        /* Scrollbar styles */
-        .content::-webkit-scrollbar {
-            width: 6px;
-        }
-        .content::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .content::-webkit-scrollbar-thumb {
-            background: #ccc;
-            border-radius: 3px;
         }
 
         /* Modal improvements */
@@ -247,36 +265,63 @@
 
         .modal-content {
             background: white;
-            padding: 20px;
-            width: 90%;
-            height: 90%;
+            padding: 15px;
+            width: 95%;
+            height: 95%;
             max-width: 600px;
             border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
             display: flex;
             flex-direction: column;
             margin: 0;
         }
 
         .modal-header {
-            margin-bottom: 15px;
-            padding-bottom: 10px;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .modal-header h2 {
+            font-size: 16px;
+            margin: 0;
+            color: #667eea;
         }
 
         .report-content {
             flex: 1;
-            padding: 15px;
+            padding: 10px;
+            background: #f9f9f9;
             border: 1px solid #eee;
-            font-size: 12px;
+            font-size: 11px;
+            overflow-y: auto;
+            border-radius: 4px;
         }
-        
+
         .btn-secondary {
             background: #6c757d;
             color: white;
-            padding: 8px 16px;
+            padding: 6px 12px;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        /* Scrollbar styles */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #ccc;
+            border-radius: 3px;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <div class="header">
@@ -383,7 +428,7 @@
 
     <script>
         // Garantir que o checkbox reflete corretamente o escopo
-        document.getElementById('applyToSelection').addEventListener('change', function() {
+        document.getElementById('applyToSelection').addEventListener('change', function () {
             // Atualizar estado quando o usuário mudar
         });
 
@@ -421,7 +466,7 @@
         }
 
         // Fechar modal ao clicar fora dele
-        window.onclick = function(event) {
+        window.onclick = function (event) {
             const modal = document.getElementById('reportModal');
             if (event.target === modal) {
                 modal.style.display = 'none';
@@ -429,11 +474,12 @@
         }
 
         // Inicializar quando o Office estiver pronto
-        Office.onReady(function(info) {
+        Office.onReady(function (info) {
             if (info.host === Office.HostType.Word) {
                 console.log('Interface carregada com sucesso!');
             }
         });
     </script>
 </body>
+
 </html>

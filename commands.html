@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <script src="apa-quote-formatter.js"></script>
+</head>
+<body>
+    <script>
+        /**
+         * Formatação rápida com configurações padrão
+         */
+        function quickFormat(event) {
+            Word.run(async (context) => {
+                try {
+                    const config = {
+                        convertQuotes: true,
+                        validateUsage: true,
+                        fixPunctuation: true,
+                        identifyLongQuotes: true,
+                        generateReport: false,
+                        applyToSelection: false
+                    };
+
+                    const formatter = new APAQuoteFormatter.QuoteFormatter(config);
+                    await formatter.execute();
+
+                    // Notificar usuário
+                    Office.context.ui.displayDialogAsync(
+                        'https://localhost:3000/success.html',
+                        { height: 30, width: 30 }
+                    );
+
+                } catch (error) {
+                    console.error('Erro na formatação rápida:', error);
+                    showNotification('Erro', error.message);
+                }
+
+                event.completed();
+            });
+        }
+
+        /**
+         * Formatar apenas a seleção atual
+         */
+        function formatSelection(event) {
+            Word.run(async (context) => {
+                try {
+                    const selection = context.document.getSelection();
+                    selection.load('text');
+                    await context.sync();
+
+                    if (!selection.text || selection.text.trim().length === 0) {
+                        showNotification('Aviso', 'Nenhum texto selecionado.');
+                        event.completed();
+                        return;
+                    }
+
+                    const config = {
+                        convertQuotes: true,
+                        validateUsage: false,
+                        fixPunctuation: true,
+                        identifyLongQuotes: false,
+                        generateReport: false,
+                        applyToSelection: true
+                    };
+
+                    const formatter = new APAQuoteFormatter.QuoteFormatter(config);
+                    await formatter.execute();
+
+                    showNotification('Sucesso', 'Seleção formatada!');
+
+                } catch (error) {
+                    console.error('Erro ao formatar seleção:', error);
+                    showNotification('Erro', error.message);
+                }
+
+                event.completed();
+            });
+        }
+
+        /**
+         * Exibe notificação ao usuário
+         */
+        function showNotification(title, message) {
+            if (Office.context.ui.displayDialogAsync) {
+                const notificationHtml = `
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <style>
+                            body {
+                                font-family: 'Segoe UI', sans-serif;
+                                padding: 20px;
+                                text-align: center;
+                            }
+                            h2 { color: #667eea; }
+                            p { color: #333; }
+                        </style>
+                    </head>
+                    <body>
+                        <h2>${title}</h2>
+                        <p>${message}</p>
+                    </body>
+                    </html>
+                `;
+                
+                // Em produção, isso seria um arquivo separado
+                console.log(title, message);
+            }
+        }
+
+        // Registrar funções
+        Office.actions.associate("quickFormat", quickFormat);
+        Office.actions.associate("formatSelection", formatSelection);
+    </script>
+</body>
+</html>

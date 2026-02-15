@@ -534,13 +534,24 @@ COMO USAR:
     }
 }
 
-// Expor funções globalmente para uso no HTML
-(window as any).APAQuoteFormatter = APAQuoteFormatter;
-(window as any).ReferenceGenerator = APAQuoteFormatter.ReferenceGenerator;
+// Expor funções globalmente para uso no HTML com feedback
+try {
+    console.log("Exposing global functions...");
+    (window as any).APAQuoteFormatter = APAQuoteFormatter;
+    (window as any).ReferenceGenerator = APAQuoteFormatter.ReferenceGenerator;
+    console.log("Global functions exposed.");
+} catch (e) {
+    console.error("Error exposing global functions:", e);
+}
 
 // Inicializar quando o Office estiver pronto
 Office.onReady((info) => {
     if (info.host === Office.HostType.Word) {
         console.log('APA Quote Formatter carregado com sucesso!');
+        // Re-garantir exposição
+        if (!(window as any).ReferenceGenerator) {
+            console.warn("ReferenceGenerator not found on window, re-assigning...");
+            (window as any).ReferenceGenerator = APAQuoteFormatter.ReferenceGenerator;
+        }
     }
 });

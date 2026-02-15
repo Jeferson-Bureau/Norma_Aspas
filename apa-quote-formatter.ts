@@ -10,6 +10,8 @@
 
 /// <reference types="office-js" />
 
+import { FormatadorAPA7 } from './references/FormatadorAPA7';
+
 namespace APAQuoteFormatter {
 
     /**
@@ -22,6 +24,71 @@ namespace APAQuoteFormatter {
         identifyLongQuotes: boolean;
         generateReport: boolean;
         applyToSelection: boolean;
+    }
+
+    /**
+     * Namespace para geração de referências
+     */
+    export namespace ReferenceGenerator {
+        let lastGeneratedReference: string = '';
+
+        export function generateReference(data: any): any {
+            const formatador = new FormatadorAPA7({
+                idiomaPadrao: 'pt',
+                incluirDOI: true,
+                validacaoEstrita: false // Permitir geração mesmo com dados parciais para preview
+            });
+
+            try {
+                // Mapear dados do formulário para o tipo Referencia
+                // Simplificação: assumindo que o formulário envia dados compatíveis ou faremos o mapeamento aqui
+                // Para este exemplo, vamos supor que 'data' já vem estruturado ou faremos um mapeamento básico
+
+                // Exemplo de mapeamento básico para Artigo
+                let referencia: any = { ...data };
+
+                // Limpar campos vazios
+                Object.keys(referencia).forEach(key => {
+                    if (referencia[key] === '' || referencia[key] === null || referencia[key] === undefined) {
+                        delete referencia[key];
+                    }
+                });
+
+                // Tratamento de autores se vierem como string (ex: "Silva, J.; Santos, M.")
+                if (typeof referencia.autores === 'string') {
+                    // Lógica de parsing simplificada ou esperar JSON
+                    // Aqui vamos assumir que a UI envia o objeto correto ou vamos implementar um parser simples
+                    // Por enquanto, vamos assumir que a UI envia autores estruturados ou vamos deixar vazio
+                }
+
+                const resultado = formatador.formatar(referencia);
+                lastGeneratedReference = resultado.referenciaCompleta;
+
+                return {
+                    success: true,
+                    reference: resultado.referenciaCompleta,
+                    citation: resultado.citacaoParentetica,
+                    narrative: resultado.citacaoNarrativa
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error: (error as Error).message
+                };
+            }
+        }
+
+        export async function insertReference(): Promise<void> {
+            if (!lastGeneratedReference) return;
+
+            await Word.run(async (context) => {
+                const selection = context.document.getSelection();
+                selection.insertText(lastGeneratedReference, Word.InsertLocation.replace);
+                // Adicionar quebra de linha após
+                selection.insertParagraph("", Word.InsertLocation.after);
+                await context.sync();
+            });
+        }
     }
 
     /**
@@ -469,6 +536,7 @@ COMO USAR:
 
 // Expor funções globalmente para uso no HTML
 (window as any).APAQuoteFormatter = APAQuoteFormatter;
+(window as any).ReferenceGenerator = APAQuoteFormatter.ReferenceGenerator;
 
 // Inicializar quando o Office estiver pronto
 Office.onReady((info) => {

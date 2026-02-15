@@ -211,9 +211,10 @@ namespace APAQuoteFormatter {
             if (!text) return;
 
             // Converter aspas duplas de abertura: "Texto -> “Texto
-            const openMatches = Array.from(text.matchAll(QuoteFormatter.Patterns.DoubleQuoteStraightOpen));
-            for (const match of openMatches) {
-                const searchResults = paragraph.search(match[0], { matchCase: true });
+            const openRegex = new RegExp(QuoteFormatter.Patterns.DoubleQuoteStraightOpen);
+            let matchOpen;
+            while ((matchOpen = openRegex.exec(text)) !== null) {
+                const searchResults = paragraph.search(matchOpen[0], { matchCase: true });
                 searchResults.load('items');
                 await context.sync();
 
@@ -235,16 +236,15 @@ namespace APAQuoteFormatter {
                 }
             }
 
-            if (openMatches.length > 0) await context.sync();
-
             // Converter aspas duplas de fechamento: Texto" -> Texto”
             paragraph.load('text');
             await context.sync();
             const updatedText = paragraph.text;
 
-            const closeMatches = Array.from(updatedText.matchAll(QuoteFormatter.Patterns.DoubleQuoteStraightClose));
-            for (const match of closeMatches) {
-                const searchResults = paragraph.search(match[0], { matchCase: true });
+            const closeRegex = new RegExp(QuoteFormatter.Patterns.DoubleQuoteStraightClose);
+            let matchClose;
+            while ((matchClose = closeRegex.exec(updatedText)) !== null) {
+                const searchResults = paragraph.search(matchClose[0], { matchCase: true });
                 searchResults.load('items');
                 await context.sync();
 
@@ -277,9 +277,10 @@ namespace APAQuoteFormatter {
             if (!text) return;
 
             // Ponto: ". -> ."
-            const periodMatches = Array.from(text.matchAll(QuoteFormatter.Patterns.PunctuationPeriod));
-            for (const match of periodMatches) {
-                const searchResults = paragraph.search(match[0], { matchCase: true });
+            const periodRegex = new RegExp(QuoteFormatter.Patterns.PunctuationPeriod);
+            let matchPeriod;
+            while ((matchPeriod = periodRegex.exec(text)) !== null) {
+                const searchResults = paragraph.search(matchPeriod[0], { matchCase: true });
                 searchResults.load('items');
                 await context.sync();
 
@@ -290,9 +291,10 @@ namespace APAQuoteFormatter {
             }
 
             // Vírgula: ", -> ,"
-            const commaMatches = Array.from(text.matchAll(QuoteFormatter.Patterns.PunctuationComma));
-            for (const match of commaMatches) {
-                const searchResults = paragraph.search(match[0], { matchCase: true });
+            const commaRegex = new RegExp(QuoteFormatter.Patterns.PunctuationComma);
+            let matchComma;
+            while ((matchComma = commaRegex.exec(text)) !== null) {
+                const searchResults = paragraph.search(matchComma[0], { matchCase: true });
                 searchResults.load('items');
                 await context.sync();
 
@@ -350,8 +352,9 @@ namespace APAQuoteFormatter {
 
         private checkScaleAnchors(text: string | undefined, pNum: number): void {
             if (!text) return;
-            const matches = text.matchAll(QuoteFormatter.Patterns.ScaleAnchor);
-            for (const match of matches) {
+            const regex = new RegExp(QuoteFormatter.Patterns.ScaleAnchor);
+            let match;
+            while ((match = regex.exec(text)) !== null) {
                 this.report.issues.push({
                     type: 'scale_anchor',
                     location: `Parágrafo ${pNum}`,
@@ -364,8 +367,9 @@ namespace APAQuoteFormatter {
 
         private checkIncorrectSingleQuotes(text: string | undefined, pNum: number): void {
             if (!text) return;
-            const matches = text.matchAll(QuoteFormatter.Patterns.IncorrectSingleQuoteContext);
-            for (const match of matches) {
+            const regex = new RegExp(QuoteFormatter.Patterns.IncorrectSingleQuoteContext);
+            let match;
+            while ((match = regex.exec(text)) !== null) {
                 const beforeQuote = text.substring(0, match.index!);
                 const openDoubleQuotes = (beforeQuote.match(/"/g) || []).length;
 
@@ -383,8 +387,9 @@ namespace APAQuoteFormatter {
 
         private checkLongQuotes(text: string | undefined, pNum: number): void {
             if (!text) return;
-            const matches = text.matchAll(QuoteFormatter.Patterns.LongQuote);
-            for (const match of matches) {
+            const regex = new RegExp(QuoteFormatter.Patterns.LongQuote);
+            let match;
+            while ((match = regex.exec(text)) !== null) {
                 if (match[1] && this.countWords(match[1]) >= 40) {
                     this.report.longQuotesFound++;
                     this.report.issues.push({
